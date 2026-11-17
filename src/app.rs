@@ -1982,7 +1982,8 @@ fn perform_llm_stream_request(
     ctx: &egui::Context,
 ) -> Result<(), String> {
     let url = provider.default_url();
-    let mut request = ureq::post(url);
+    // Read 4xx/5xx bodies ourselves so the provider's error message is shown.
+    let mut request = ureq::post(url).config().http_status_as_error(false).build();
 
     match provider {
         LlmProvider::OpenRouter => {
@@ -1990,18 +1991,18 @@ fn perform_llm_stream_request(
                 return Err("API Key is required for OpenRouter".to_string());
             }
             request = request
-                .set("Authorization", &format!("Bearer {}", api_key.trim()))
-                .set("Content-Type", "application/json")
-                .set("HTTP-Referer", "https://github.com/ValentinTorassa/vt-lens")
-                .set("X-Title", "VT Lens");
+                .header("Authorization", &format!("Bearer {}", api_key.trim()))
+                .header("Content-Type", "application/json")
+                .header("HTTP-Referer", "https://github.com/ValentinTorassa/vt-lens")
+                .header("X-Title", "VT Lens");
         }
         LlmProvider::OpenAI => {
             if api_key.trim().is_empty() {
                 return Err("API Key is required for OpenAI".to_string());
             }
             request = request
-                .set("Authorization", &format!("Bearer {}", api_key.trim()))
-                .set("Content-Type", "application/json");
+                .header("Authorization", &format!("Bearer {}", api_key.trim()))
+                .header("Content-Type", "application/json");
         }
         LlmProvider::Anthropic => {
             if api_key.trim().is_empty() {
@@ -2010,13 +2011,13 @@ fn perform_llm_stream_request(
             // Server-side fallback: if the model declines on a safety category,
             // the API reroutes the request instead of returning an empty answer.
             request = request
-                .set("x-api-key", api_key.trim())
-                .set("anthropic-version", "2023-06-01")
-                .set("anthropic-beta", "server-side-fallback-2026-07-01")
-                .set("Content-Type", "application/json");
+                .header("x-api-key", api_key.trim())
+                .header("anthropic-version", "2023-06-01")
+                .header("anthropic-beta", "server-side-fallback-2026-07-01")
+                .header("Content-Type", "application/json");
         }
         LlmProvider::Ollama => {
-            request = request.set("Content-Type", "application/json");
+            request = request.header("Content-Type", "application/json");
         }
     }
 
@@ -2063,19 +2064,17 @@ fn perform_llm_stream_request(
         }
     };
 
-    // ureq 2 turns every 4xx/5xx into Error::Status, so the provider's error
-    // body has to be read from there (a status check on Ok never fired).
-    let response = match request.send_json(body) {
-        Ok(response) => response,
-        Err(ureq::Error::Status(code, response)) => {
-            let body = response.into_string().unwrap_or_default();
-            let snippet: String = body.chars().take(400).collect();
-            return Err(format!("El proveedor respondió HTTP {code}: {snippet}"));
-        }
-        Err(err) => return Err(format!("HTTP request failed: {err}")),
-    };
+    let response = request
+        .send_json(body)
+        .map_err(|err| format!("HTTP request failed: {err}"))?;
+    let code = response.status().as_u16();
+    if code >= 400 {
+        let body = response.into_body().read_to_string().unwrap_or_default();
+        let snippet: String = body.chars().take(400).collect();
+        return Err(format!("El proveedor respondió HTTP {code}: {snippet}"));
+    }
 
-    let reader = std::io::BufReader::new(response.into_reader());
+    let reader = std::io::BufReader::new(response.into_body().into_reader());
 
     use std::io::BufRead;
     for line_result in reader.lines() {

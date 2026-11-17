@@ -185,7 +185,7 @@ El paquete añade el lanzador `vt-lens.desktop` y deja `secret-tool` (libsecret)
 
 ## MVP Features
 
-- Native minimal GUI with `egui` / `eframe` (0.36).
+- Native minimal GUI with `egui` / `eframe` (0.37).
 - Linux and macOS: both backends feed the same UI (`src/capture/`).
 - Live process table: PID, name, command line, memory, threads, socket count.
 - Live network table: protocol, owner process, local address, remote address,

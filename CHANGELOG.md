@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- eframe/egui 0.36.2 → 0.37.0, ureq 2 → 3 (HTTP error bodies from the LLM
+  provider are still shown), and refreshed lockfile.
+
 ## 0.3.0 - 2026-10-23
 
 - Compare two fixed process and socket captures: new and ended processes,
